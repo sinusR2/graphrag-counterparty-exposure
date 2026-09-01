@@ -1,0 +1,25 @@
+{
+    "python-envs.terminal.autoActivationType": "shellStartup",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
+    "search.exclude": {
+        ".venv": true,
+        "data/raw": true,
+        "data/processed": true
+    },
+    "files.watcherExclude": {
+        "**/.venv/**": true,
+        "**/data/raw/**": true,
+        "**/data/processed/**": true
+    }
+}

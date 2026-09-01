@@ -1,0 +1,14 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-python.vscode-python-envs",
+        "charliermarsh.ruff",
+        "ms-toolsai.jupyter",
+        "neo4j-extensions.neo4j-for-vscode",
+        "humao.rest-client",
+        "eamodio.gitlens",
+        "mikestead.dotenv"
+    ]
+}

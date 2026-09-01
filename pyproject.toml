@@ -1,0 +1,34 @@
+[project]
+name = "graphrag-exposure"
+version = "0.1.0"
+description = "GraphRAG system for corporate ownership and counterparty exposure analysis"
+requires-python = ">=3.12"   # floor, not a pin — allows newer compatible versions too
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "neo4j",
+    "anthropic",
+    "sentence-transformers",
+    "pydantic",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+    "pre-commit",  # manages git hooks that run Ruff automatically before each commit — see Section 6
+]
+
+[build-system]
+requires = ["hatchling"]  # auto-installed by pip when needed, not something you install yourself
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100  # characters, applies to .py files only
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# E/W = pycodestyle (style/PEP8), F = pyflakes (likely bugs, e.g. unused imports),
+# I = isort (import ordering), UP = pyupgrade (modernize syntax), B = bugbear (common bug patterns)
