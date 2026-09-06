@@ -11,6 +11,7 @@ dependencies = [
     "sentence-transformers",
     "pydantic",
     "python-dotenv",
+    "httpx",  # single HTTP client for both GLEIF and Companies House ingestion
 ]
 
 [project.optional-dependencies]
@@ -18,6 +19,7 @@ dev = [
     "pytest",
     "ruff",
     "pre-commit",  # manages git hooks that run Ruff automatically before each commit — see Section 6
+    "ipykernel",   # required for this venv to appear as a selectable Jupyter kernel
 ]
 
 [build-system]

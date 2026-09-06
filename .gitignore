@@ -11,6 +11,9 @@ htmlcov/
 .venv/
 .env
 
+# Personal working notes — never intended for the public repo
+_notes/
+
 # Data — never commit raw or processed data
 data/raw/*
 data/processed/*

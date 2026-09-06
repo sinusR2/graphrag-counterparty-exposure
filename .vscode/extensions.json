@@ -9,6 +9,7 @@
         "neo4j-extensions.neo4j-for-vscode",
         "humao.rest-client",
         "eamodio.gitlens",
-        "mikestead.dotenv"
+        "mikestead.dotenv",
+        "ms-vscode.powershell"
     ]
 }
