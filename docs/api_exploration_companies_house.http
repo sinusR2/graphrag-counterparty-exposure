@@ -1,0 +1,37 @@
+# Companies House API exploration — Phase 1 reconnaissance.
+# Requires the REST Client extension (humao.rest-client) and a
+# COMPANIES_HOUSE_API_KEY entry in .env at the repo root.
+# Auth is HTTP Basic with the key as username and an empty password —
+# the trailing colon on the Authorization line is required.
+
+@chKey = {{$dotenv COMPANIES_HOUSE_API_KEY}}
+
+### Smoke test — should return 200 and JSON
+GET https://api.company-information.service.gov.uk/company/00000006
+Authorization: Basic {{chKey}}:
+
+# example comapany number for testing: BARCLAYS BANK PLC
+@companyNumber = 01026167
+
+### Company profile
+GET https://api.company-information.service.gov.uk/company/{{companyNumber}}
+Authorization: Basic {{chKey}}:
+
+### PSC — control-based ownership
+GET https://api.company-information.service.gov.uk/company/{{companyNumber}}/persons-with-significant-control
+Authorization: Basic {{chKey}}:
+
+### Filing history, accounts only
+GET https://api.company-information.service.gov.uk/company/{{companyNumber}}/filing-history?category=accounts
+Authorization: Basic {{chKey}}:
+
+### Document metadata
+@documentId = B0GjhuJYdKRbZa4jJbfP_D5B8VmM2xKqmIgVW4bnHcM
+GET https://document-api.company-information.service.gov.uk/document/{{documentId}}
+Authorization: Basic {{chKey}}:
+
+### Document content — stop at the 302
+# @no-redirect
+GET https://document-api.company-information.service.gov.uk/document/{{documentId}}/content
+Authorization: Basic {{chKey}}:
+Accept: application/pdf
