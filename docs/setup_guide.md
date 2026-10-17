@@ -5,20 +5,23 @@ each step. The README has the short version; this is the one to read if somethin
 work or if you want to know why a step exists.
 
 Commands are given for Windows PowerShell, with the macOS/Linux equivalent noted where it
-differs. Run them in a terminal opened at the repository root.
+differs. Run them in a terminal; once you have cloned the repository, stay in its root
+folder.
 
 ---
 
 ## 1. Prerequisites
 
-- **Python 3.12.** Not 3.13 or newer — `sentence-transformers` and `torch` lag a few
-  months behind the newest Python release. Check with `python --version`.
+- **Python 3.12.** This is the version the project is developed and tested on.
+  `pyproject.toml` declares `>=3.12`, but `sentence-transformers` and `torch` tend to lag
+  a few months behind the newest Python release, so a much newer interpreter may fail at
+  install time. Check with `python --version`.
 - **Git.**
 - **A free Neo4j AuraDB instance.** Sign up at
   [neo4j.com/product/auradb](https://neo4j.com/product/auradb/), create a free instance,
   and save the connection URI, username and generated password immediately — the password
   is shown once and cannot be retrieved afterwards.
-- **An Anthropic API key** from the [Claude Console](https://console.anthropic.com). This
+- **An Anthropic API key** from the [Claude Console](https://platform.claude.com). This
   is billed pay-as-you-go and is separate from any Claude subscription. Setting a spend
   limit is advisable.
 - **A Companies House REST API key.** Register at the
@@ -49,7 +52,7 @@ downgrade.
 ## 2. Clone and install
 
 ```powershell
-git clone https://github.com/<you>/graphrag-counterparty-exposure.git
+git clone https://github.com/sinusR2/graphrag-counterparty-exposure.git
 cd graphrag-counterparty-exposure
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
@@ -73,6 +76,10 @@ link back to `src/` rather than a frozen copy — useful while developing, irrel
 are only running the code. A plain `pip install .` gives working imports too, just without
 live editing, and is the right choice for a container image that does not need dev tooling.
 
+pip may print a notice that a newer version of pip is available. It is safe to upgrade
+with `python -m pip install --upgrade pip`. Going through `python -m` avoids Windows
+locking pip's own executable while it replaces itself.
+
 ---
 
 ## 3. Configuration
@@ -95,9 +102,10 @@ deliberately: a missing variable raises a `KeyError` naming exactly which one is
 at import time, rather than returning `None` and failing confusingly later inside a
 database connection attempt.
 
-Two things that will bite you when editing `.env`: values are taken literally, so a `#`
-comment appended to a line becomes part of the value, and quotes around a value become part
-of the value in some parsers. Keep each line to bare `KEY=value`.
+Keep every line in `.env` as bare `KEY=value`, and put comments on their own line.
+`.env` parsing is not standardised: some tools treat a trailing `# comment` or
+surrounding quotes as part of the value, and a mis-parsed value usually surfaces far from
+where it was set, such as a failed database or API authentication.
 
 ---
 
@@ -118,6 +126,9 @@ on every commit:
   notebook changes its stored outputs even when the code has not changed, producing noisy
   diffs, and raw API responses sitting in outputs are exactly what trips the large-file
   check.
+
+If a hook reports `Failed` and says it modified files, nothing is broken: see
+Troubleshooting below.
 
 Pinned hook versions go stale. `pre-commit autoupdate` updates them all; review the diff
 before committing it, as with any dependency bump.
@@ -143,7 +154,8 @@ visible in `git diff` before you commit.
 - **Pytest: current file** — runs the open test file with the debugger attached.
 
 If VS Code appears to be using the wrong interpreter, fix it via
-`Ctrl+Shift+P` → `Python: Select Interpreter`.
+`Ctrl+Shift+P` → `Python: Select Interpreter`. For notebooks, choose the `.venv` through
+*Select Kernel* → *Python Environments*.
 
 ---
 
@@ -177,6 +189,7 @@ any standalone script. Every other module gets a module-scoped logger:
 
 ```python
 import logging
+
 logger = logging.getLogger(__name__)
 ```
 
@@ -206,8 +219,35 @@ deleting `.venv` and rebuilding it from `pyproject.toml` alone; this is the real
 the file is complete, and it catches anything that only worked because it was once
 installed manually and never declared.
 
-**Branching.** One branch per phase (`phase1-data-reconnaissance`,
-`phase2-entity-selection`), merged to `main` when the phase is demonstrable.
+**Branching.** One branch per phase, named after the phase (`phase1-data-reconnaissance`,
+`phase2-entity-selection`). Tooling and housekeeping changes go straight to `main`;
+anything that does a phase's actual work goes on its branch. Push the branch early and keep
+pushing, so the work never exists only on one machine:
+
+```powershell
+git switch -c phase1-data-reconnaissance
+git push -u origin phase1-data-reconnaissance
+```
+
+A phase is ready to merge when the exit criterion defined for it is met, not when it feels
+polished. Merge with an explicit merge commit so the phase shows up as one unit in the
+history, then tag the milestone and delete the branch:
+
+```powershell
+git switch main
+git merge --no-ff -m "Merge phase 1: data reconnaissance" phase1-data-reconnaissance
+git tag -a phase1-complete -m "Phase 1: data reconnaissance complete"
+git push origin main --tags
+git branch -d phase1-data-reconnaissance
+git push origin --delete phase1-data-reconnaissance
+```
+
+Pass the merge message with `-m`. Without it, git opens an editor for the message — Vim by
+default on Windows — and the generated default is almost always what you want anyway.
+
+**Notebooks** live in a flat `notebooks/` folder, prefixed with the phase they belong to
+(`phase2_candidate_screening.ipynb`). Outputs are stripped automatically on commit by
+`nbstripout`.
 
 **Commit messages** follow Conventional Commits — `<type>: <description>`, where `feat` is
 a new feature, `fix` a bug fix, `docs` a documentation-only change, and `chore` routine
@@ -225,6 +265,25 @@ reappear for any new file the first time it is staged, and is safe to ignore eve
 in which nothing has ever been tracked. `git status -u` expands it. This looks alarming for
 `data/`, where `.gitignore` excludes the contents but un-ignores two `.gitkeep` files; the
 rule is applied correctly underneath, and `git add .` stages only the `.gitkeep` files.
+
+**A commit is rejected and a hook says `Failed` / `files were modified by this hook`** —
+the hook fixed something (typically a missing newline at the end of a file) and stopped the
+commit on purpose, so that the commit never contains changes you have not seen. Run
+`git add` on the modified files and commit again; the second run passes. If the hook
+reports a problem it cannot fix itself, such as a Ruff lint error, edit the code, stage it,
+and retry. `git commit --no-verify` skips every hook and should not become a habit.
+
+On Windows the same situation can instead appear as `Stashed changes conflicted with hook
+auto-fixes... Rolling back fixes`. It means unstaged changes existed at commit time —
+typically the hook's own fix from the previous attempt. Nothing is lost. Stage the modified
+files and commit again; retrying without staging repeats the conflict indefinitely.
+
+**VS Code underlines an import as unresolved right after installing a package** — the
+language server indexes installed packages when the interpreter is selected and can lag
+behind a large install. If the code runs, only the editor is stale: use
+`Ctrl+Shift+P` → `Python: Restart Language Server`, or `Developer: Reload Window` if that
+does not clear it. The same reload fixes a freshly created `.venv` that is missing from the
+notebook kernel list.
 
 **VS Code notification: "An environment file is configured but terminal environment
 injection is disabled."** — this asks whether VS Code should also inject `.env` values into
