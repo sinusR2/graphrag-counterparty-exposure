@@ -20,19 +20,30 @@ BASE_URL = "https://api.gleif.org/api/v1"
 PAGE_SIZE = 200
 REQUEST_DELAY = 0.25  # seconds between requests - be polite to the API
 TIMEOUT = 30.0
+COMPANIES_HOUSE_RAS = {
+    "RA000585",
+    "RA000586",
+    "RA000587",
+}  # GLEIF registration authority ID for Companies House
 
 # --- Hardcoded input -------------------------------------------------------
 # Replace with real (name, LEI) pairs.
 
 CANDIDATES = [
-    ("Example Holdings Ltd", "5493001KJTIIGC8Y1R12"),
-    ("Example Group PLC", "213800WSGIIZCXF1P572"),
+    ("Tesco PLC", "2138002P5RNKC5W2JZ46"),
+    ("Barclays PLC", "213800LBQA1Y9L22JB70"),
+    ("Shell PLC", "21380068P1DRHMJ8KU70"),
+    ("Vodafone Group PLC", "213800TB53ELEUKM7Q61"),
 ]
 
 # Subset of CANDIDATES to run the deeper GB-only chain analysis on.
+# Filled in by hand after reading Step 1's output.
 SURVIVORS = [
-    ("Example Holdings Ltd", "5493001KJTIIGC8Y1R12"),
+    ("Tesco PLC", "2138002P5RNKC5W2JZ46"),  # check: at most 3 entities at depth >= 2
+    ("Barclays PLC", "213800LBQA1Y9L22JB70"),
+    ("Shell PLC", "21380068P1DRHMJ8KU70"),
 ]
+
 
 # --- HTTP helpers ------------------------------------------------------------
 
@@ -129,6 +140,14 @@ def extract_jurisdiction(rec):
     return get_nested(rec, "attributes", "entity", "jurisdiction") or "UNKNOWN"
 
 
+def extract_authority(rec):
+    return get_nested(rec, "attributes", "entity", "registeredAt", "id") or "UNKNOWN"
+
+
+def extract_status(rec):
+    return get_nested(rec, "attributes", "registration", "status") or "UNKNOWN"
+
+
 # --- Step 1: descendant screening -------------------------------------------
 
 
@@ -172,12 +191,18 @@ def screen_candidate(client, name, lei):
 def build_tree(client, root_name, root_lei):
     """BFS the direct-children relationship from root_lei, deduplicating
     nodes by LEI (guards cycles: an already-seen LEI is never re-queued)."""
-    nodes = {}  # lei -> {"name", "jurisdiction", "children": [lei, ...]}
+    # lei -> {"name", "jurisdiction", "authority", "status", "children": [lei, ...]}
+    nodes = {}
     visited = set()
 
-    root_record = fetch_record(client, root_lei)
-    root_jurisdiction = extract_jurisdiction(root_record) if root_record else "UNKNOWN"
-    nodes[root_lei] = {"name": root_name, "jurisdiction": root_jurisdiction, "children": []}
+    root_record = fetch_record(client, root_lei) or {}
+    nodes[root_lei] = {
+        "name": root_name,
+        "jurisdiction": extract_jurisdiction(root_record),
+        "authority": extract_authority(root_record),
+        "status": extract_status(root_record),
+        "children": [],
+    }
     visited.add(root_lei)
 
     queue = deque([root_lei])
@@ -194,6 +219,8 @@ def build_tree(client, root_name, root_lei):
                 nodes[child_lei] = {
                     "name": extract_name(rec),
                     "jurisdiction": extract_jurisdiction(rec),
+                    "authority": extract_authority(rec),
+                    "status": extract_status(rec),
                     "children": [],
                 }
 
@@ -209,13 +236,13 @@ def build_tree(client, root_name, root_lei):
 
 
 def gb_only_analysis(nodes, root_lei):
-    gb_nodes = {lei for lei, n in nodes.items() if n["jurisdiction"] == "GB"}
+    gb_nodes = {lei for lei, n in nodes.items() if n["authority"] in COMPANIES_HOUSE_RAS}
 
     if not gb_nodes:
-        print("  no GB-jurisdiction nodes found")
+        print("  no Companies House-registered nodes found")
         return
 
-    # Induced subgraph: keep an edge only if both endpoints are GB.
+    # Induced subgraph: keep an edge only if both endpoints are Companies House-registered.
     subgraph_children = defaultdict(list)
     child_of_gb_edge = set()
     for lei in gb_nodes:
@@ -224,7 +251,7 @@ def gb_only_analysis(nodes, root_lei):
                 subgraph_children[lei].append(child)
                 child_of_gb_edge.add(child)
 
-    # Roots of the GB-only forest: GB nodes that aren't reached via a GB edge.
+    # Roots of the CH-only forest: CH nodes that aren't reached via a CH edge.
     roots = [lei for lei in gb_nodes if lei not in child_of_gb_edge]
 
     depth_counts = Counter()
@@ -246,15 +273,16 @@ def gb_only_analysis(nodes, root_lei):
     for root in roots:
         dfs(root, 0, [root], set())
 
-    print(f"  GB-jurisdiction nodes: {len(gb_nodes)}")
+    print(f"  Companies House-registered nodes ({COMPANIES_HOUSE_RAS}): {len(gb_nodes)}")
     print(f"  maximum depth: {max_depth}")
     print("  nodes per depth level:")
     for d in sorted(depth_counts):
         print(f"    depth {d}: {depth_counts[d]}")
 
-    print("  deepest GB-only chain:")
+    print("  deepest Companies House-only chain:")
     for lei in deepest_chain:
-        print(f"    - {nodes[lei]['name']} ({lei})")
+        n = nodes[lei]
+        print(f"    - {n['name']} [{n['jurisdiction']}, {n['authority']}, {n['status']}] ({lei})")
 
 
 # --- main --------------------------------------------------------------------
