@@ -50,7 +50,7 @@ prefer clear, conventional code over clever code.
 - Follow the links in a GLEIF record's `relationships` block rather than constructing URLs.
 - GLEIF recursion terminates on `reporting-exceptions` records (e.g. `NATURAL_PERSONS`,
   no-LEI parent) as a normal condition, not an error.
-- GLEIF `registeredAs` is the entity's number in its own local register, not a Companies
+- GLEIF registeredAs is the entity's number in its own local register, not a Companies House number. Route to Companies House by registration authority (entity.registeredAt.id), not by entity.jurisdiction. Companies House codes: RA000585 (England and Wales), plus RA000586 (Northern Ireland) and RA000587 (Scotland).
   House number. Route to Companies House by registration authority
   (`entity.registeredAt`), not by jurisdiction.
 - Non-GB entities stay in the graph as identity-only nodes. Never assume Companies House properties exist on a node.
