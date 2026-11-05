@@ -254,6 +254,51 @@ def build_tree(client, root_name, root_lei):
     return nodes
 
 
+def full_subtree_size(nodes, lei):
+    """Entities in the subtree of lei in the full tree (any authority), itself included."""
+    return 1 + sum(full_subtree_size(nodes, child) for child in nodes[lei]["children"])
+
+
+def ch_subtree_stats(nodes, ch_children, lei, forest_depth, stats):
+    """Recursively fill stats[lei] = {depth, ch_size, ch_depth, lapsed} for lei and its
+    Companies House descendants. Returns (ch_size, ch_depth, lapsed) for lei."""
+    ch_size = 1
+    ch_depth = 0
+    lapsed = 1 if nodes[lei]["status"] == "LAPSED" else 0
+    for child in ch_children.get(lei, []):
+        c_size, c_depth, c_lapsed = ch_subtree_stats(
+            nodes, ch_children, child, forest_depth + 1, stats
+        )
+        ch_size += c_size
+        ch_depth = max(ch_depth, c_depth + 1)
+        lapsed += c_lapsed
+    stats[lei] = {"depth": forest_depth, "ch_size": ch_size, "ch_depth": ch_depth, "lapsed": lapsed}
+    return ch_size, ch_depth, lapsed
+
+
+def print_sub_roots(nodes, ch_children, forest_roots):
+    """Table of Companies House entities whose CH subtree is at least 3 levels deep."""
+    stats = {}
+    for root in forest_roots:
+        ch_subtree_stats(nodes, ch_children, root, 0, stats)
+
+    rows = [(lei, s) for lei, s in stats.items() if s["ch_depth"] >= 2]
+    rows.sort(key=lambda r: (r[1]["ch_depth"], r[1]["ch_size"]), reverse=True)
+
+    print("  sub-roots (Companies House subtree depth >= 2):")
+    if not rows:
+        print("    none")
+        return
+    print(
+        "    name | LEI | depth in forest | CH subtree size | full subtree size | CH depth | lapsed"
+    )
+    for lei, s in rows:
+        print(
+            f"    {nodes[lei]['name']} | {lei} | {s['depth']} | {s['ch_size']} | "
+            f"{full_subtree_size(nodes, lei)} | {s['ch_depth']} | {s['lapsed']}"
+        )
+
+
 def gb_only_analysis(nodes, root_lei):
     gb_nodes = {lei for lei, n in nodes.items() if n["authority"] in COMPANIES_HOUSE_RAS}
 
@@ -302,6 +347,8 @@ def gb_only_analysis(nodes, root_lei):
     for lei in deepest_chain:
         n = nodes[lei]
         print(f"    - {n['name']} [{n['jurisdiction']}, {n['authority']}, {n['status']}] ({lei})")
+
+    print_sub_roots(nodes, subgraph_children, roots)
 
     deep_count = sum(c for d, c in depth_counts.items() if d >= 2)
     return max_depth, deep_count
