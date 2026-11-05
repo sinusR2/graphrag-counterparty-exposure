@@ -42,6 +42,7 @@ prefer clear, conventional code over clever code.
 - Ask before adding a dependency. New dependencies go into `pyproject.toml`, never an
   ad-hoc `pip install`.
 - When a design choice is not covered here, ask rather than guess.
+- Make file changes with the edit tool, not with `sed`, `awk` or shell redirection, so every change shows up as a diff I approve.
 
 ## Domain facts the code depends on
 
@@ -50,9 +51,10 @@ prefer clear, conventional code over clever code.
 - Follow the links in a GLEIF record's `relationships` block rather than constructing URLs.
 - GLEIF recursion terminates on `reporting-exceptions` records (e.g. `NATURAL_PERSONS`,
   no-LEI parent) as a normal condition, not an error.
-- GLEIF registeredAs is the entity's number in its own local register, not a Companies House number. Route to Companies House by registration authority (entity.registeredAt.id), not by entity.jurisdiction. Companies House codes: RA000585 (England and Wales), plus RA000586 (Northern Ireland) and RA000587 (Scotland).
+- GLEIF `registeredAs` is the entity's number in its own local register, not a Companies
   House number. Route to Companies House by registration authority
-  (`entity.registeredAt`), not by jurisdiction.
+  (`entity.registeredAt.id`), not by `entity.jurisdiction`. Companies House codes:
+  `RA000585` (England and Wales), `RA000586` (Northern Ireland), `RA000587` (Scotland).
 - Non-GB entities stay in the graph as identity-only nodes. Never assume Companies House properties exist on a node.
 - Companies House auth is HTTP Basic: API key as username, empty password.
 - Companies House document content returns a 302 to a pre-signed S3 URL. Do not forward
