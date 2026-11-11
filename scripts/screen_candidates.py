@@ -1,14 +1,13 @@
 """
 Throwaway candidate-screening script against the GLEIF API.
 
-Step 0: (only when company names are given on the command line) resolve each
-        name to its top parent by searching GLEIF legal names.
+Step 0: resolve each name to its top parent by searching GLEIF legal names.
 Step 1: for each candidate, pull all ultimate-children and summarize
         jurisdiction / registration authority / status distribution.
 Step 2: for each candidate that passes the thresholds, walk direct-children
         from the root and find the deepest chain of Companies House entities.
 
-No auth required. Uses httpx. Prints to stdout only.
+No auth required. Uses httpx. Results go to stdout, request errors to stderr.
 """
 
 import argparse
@@ -32,27 +31,6 @@ MAX_MATCHES = 500  # Step 0 safety cap on name-search results
 TOP_PARENTS_SHOWN = 5  # Step 0 prints only this many top parents
 MIN_ULTIMATE_CHILDREN = 15  # Step 0: skip a name whose best top parent has fewer
 MIN_CH_ENTITIES = 15  # Step 2 runs only if Step 1 finds at least this many CH entities
-
-# --- Hardcoded input -------------------------------------------------------
-# Replace with real (name, LEI) pairs.
-
-CANDIDATES = [
-    ("BABCOCK INTERNATIONAL GROUP PLC", "213800TSKOLX4EU6L377"),
-]
-# ("Tesco PLC", "2138002P5RNKC5W2JZ46"),
-# ("Barclays PLC", "213800LBQA1Y9L22JB70"),
-# ("Shell PLC", "21380068P1DRHMJ8KU70"),
-# ("Vodafone Group PLC", "213800TB53ELEUKM7Q61"),
-
-# Subset of CANDIDATES to run the deeper GB-only chain analysis on.
-# Filled in by hand after reading Step 1's output.
-SURVIVORS = [
-    ("BABCOCK INTERNATIONAL GROUP PLC", "213800TSKOLX4EU6L377"),
-]
-
-# ("Tesco PLC", "2138002P5RNKC5W2JZ46"),  # check: at most 3 entities at depth >= 2
-# ("Barclays PLC", "213800LBQA1Y9L22JB70"),
-# ("Shell PLC", "21380068P1DRHMJ8KU70"),
 
 # --- HTTP helpers ------------------------------------------------------------
 
@@ -90,7 +68,7 @@ def fetch_page(client, url, params, ignore_not_found=False):
 
     if isinstance(payload, dict) and payload.get("errors"):
         detail = payload["errors"][0].get("detail") or payload["errors"][0].get("title")
-        print(f"  (reporting exception / error at {url}: {detail})")
+        print(f"  ! API error at {url}: {detail}", file=sys.stderr)
         return None
 
     if resp.status_code >= 400:
@@ -173,13 +151,9 @@ def screen_candidate(client, name, lei):
     status_counter = Counter()
 
     for rec in records:
-        attrs = rec.get("attributes", {})
-        jurisdiction = get_nested(attrs, "entity", "jurisdiction") or "UNKNOWN"
-        authority = get_nested(attrs, "entity", "registeredAt", "id") or "UNKNOWN"
-        status = get_nested(attrs, "registration", "status") or "UNKNOWN"
-        jurisdiction_counter[jurisdiction] += 1
-        authority_counter[authority] += 1
-        status_counter[status] += 1
+        jurisdiction_counter[extract_jurisdiction(rec)] += 1
+        authority_counter[extract_authority(rec)] += 1
+        status_counter[extract_status(rec)] += 1
 
     print(f"  total descendants: {len(records)}")
 
@@ -204,7 +178,7 @@ def screen_candidate(client, name, lei):
     }
 
 
-# --- Step 2: GB-only chain analysis -----------------------------------------
+# --- Step 2: Companies House chain analysis ---------------------------------
 
 
 def build_tree(client, root_name, root_lei):
@@ -299,24 +273,24 @@ def print_sub_roots(nodes, ch_children, forest_roots):
         )
 
 
-def gb_only_analysis(nodes, root_lei):
-    gb_nodes = {lei for lei, n in nodes.items() if n["authority"] in COMPANIES_HOUSE_RAS}
+def ch_only_analysis(nodes):
+    ch_nodes = {lei for lei, n in nodes.items() if n["authority"] in COMPANIES_HOUSE_RAS}
 
-    if not gb_nodes:
+    if not ch_nodes:
         print("  no Companies House-registered nodes found")
         return None, None
 
     # Induced subgraph: keep an edge only if both endpoints are Companies House-registered.
     subgraph_children = defaultdict(list)
-    child_of_gb_edge = set()
-    for lei in gb_nodes:
+    reached_by_ch_edge = set()
+    for lei in ch_nodes:
         for child in nodes[lei]["children"]:
-            if child in gb_nodes:
+            if child in ch_nodes:
                 subgraph_children[lei].append(child)
-                child_of_gb_edge.add(child)
+                reached_by_ch_edge.add(child)
 
     # Roots of the CH-only forest: CH nodes that aren't reached via a CH edge.
-    roots = [lei for lei in gb_nodes if lei not in child_of_gb_edge]
+    roots = [lei for lei in ch_nodes if lei not in reached_by_ch_edge]
 
     depth_counts = Counter()
     max_depth = -1
@@ -337,7 +311,8 @@ def gb_only_analysis(nodes, root_lei):
     for root in roots:
         dfs(root, 0, [root], set())
 
-    print(f"  Companies House-registered nodes ({COMPANIES_HOUSE_RAS}): {len(gb_nodes)}")
+    codes = ", ".join(sorted(COMPANIES_HOUSE_RAS))
+    print(f"  Companies House-registered nodes ({codes}): {len(ch_nodes)}")
     print(f"  maximum depth: {max_depth}")
     print("  nodes per depth level:")
     for d in sorted(depth_counts):
@@ -509,35 +484,18 @@ def screen_name(client, name):
     print(f"=== STEP 2: {parent['name']} ({parent['lei']}) ===")
     nodes = build_tree(client, parent["name"], parent["lei"])
     print(f"  total nodes fetched: {len(nodes)}")
-    max_depth, deep_count = gb_only_analysis(nodes, parent["lei"])
+    max_depth, deep_count = ch_only_analysis(nodes)
     print()
     row.update(nodes=len(nodes), depth=max_depth, deep=deep_count)
     return row
 
 
-def run_fixed_lists(client):
-    print("########## STEP 1: descendant screening ##########\n")
-    for name, lei in CANDIDATES:
-        screen_candidate(client, name, lei)
-
-    print("########## STEP 2: GB-only chain analysis ##########\n")
-    for name, lei in SURVIVORS:
-        print(f"=== {name} ({lei}) ===")
-        nodes = build_tree(client, name, lei)
-        print(f"  total nodes fetched: {len(nodes)}")
-        gb_only_analysis(nodes, lei)
-        print()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Screen companies in GLEIF.")
-    parser.add_argument("names", nargs="*", help="company names to search for")
+    parser.add_argument("names", nargs="+", help="company names to search for")
     args = parser.parse_args()
 
     with httpx.Client(timeout=TIMEOUT, headers={"Accept": "application/vnd.api+json"}) as client:
-        if not args.names:
-            run_fixed_lists(client)
-            return
         rows = [screen_name(client, name) for name in args.names]
         print_summary(rows)
 
