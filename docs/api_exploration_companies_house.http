@@ -10,8 +10,8 @@
 GET https://api.company-information.service.gov.uk/company/00000006
 Authorization: Basic {{chKey}}:
 
-# example comapany number for testing: BARCLAYS BANK PLC
-@companyNumber = 01026167
+# example company number for testing: CENTRICA PLC
+@companyNumber = 03033654
 
 ### Company profile
 GET https://api.company-information.service.gov.uk/company/{{companyNumber}}
@@ -26,7 +26,7 @@ GET https://api.company-information.service.gov.uk/company/{{companyNumber}}/fil
 Authorization: Basic {{chKey}}:
 
 ### Document metadata
-@documentId = B0GjhuJYdKRbZa4jJbfP_D5B8VmM2xKqmIgVW4bnHcM
+@documentId = 9VuPDZhquSI1fTsLsaTGg9EM7thvPbLZmEH873Q8t50
 GET https://document-api.company-information.service.gov.uk/document/{{documentId}}
 Authorization: Basic {{chKey}}:
 
