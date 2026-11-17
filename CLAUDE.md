@@ -17,7 +17,10 @@ prefer clear, conventional code over clever code.
   `sentence-transformers` for embeddings
 - Ruff (config in `pyproject.toml`, line length 100). Code must pass `ruff check` and
   `ruff format`.
-- Type hints on function signatures. Small functions.
+- Type hints on function signatures in `src/`; not required in `scripts/` or `notebooks/`.
+- Every function gets a short docstring saying what it does, scripts included, and
+  non-obvious lines get a short comment. I read the code to learn from it.
+- Small functions.
 - Tests with pytest in `tests/`, mirroring the `src/` structure. Test logic, not live APIs.
 - Logging: `logger = logging.getLogger(__name__)`, `%s`-style arguments rather than
   f-strings, no `print()` in `src/`. Never log keys or config objects.
@@ -61,3 +64,10 @@ prefer clear, conventional code over clever code.
   the `Authorization` header across that redirect.
 - PSC `natures_of_control`: only `ownership-of-shares-*` entries mean ownership.
 - A missing ownership percentage is stored as null with a reason. Never default to 100%.
+
+## Task files
+
+- Implementation tasks are specified in `_notes/tasks/<name>.md`. Implement what the file
+  says; if anything in it is unclear or conflicts with this file, ask rather than guess.
+- When done, append a `## Done` section to the task file: files changed, checks run,
+  anything left open.
